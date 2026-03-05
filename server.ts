@@ -1,39 +1,43 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import * as dotenv from "dotenv";
-import { GoogleGenAI, Type } from "@google/genai";
-import Replicate from "replicate";
 import { createClient } from "@supabase/supabase-js";
+import path from "path";
+import { fileURLToPath } from "url";
+import userRoutes from "./src/server/routes/user.routes";
+import authRoutes from "./src/server/routes/auth.routes";
+import subscriptionRoutes from "./src/server/routes/subscription.routes";
+import metricsRoutes from "./src/server/routes/metrics.routes";
+import adminRoutes from "./src/server/routes/admin.routes";
+import { handleStripeWebhook } from "./src/server/controllers/webhook.controller";
+import { apiLimiter } from "./src/server/middlewares/rate-limit.middleware";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
 const app = express();
 const PORT = 3000;
 
+// Trust proxy for rate limiting behind Nginx
+app.set('trust proxy', 1);
+
+// Webhook must be parsed as raw body for signature verification
+app.post('/api/webhook/stripe', express.raw({ type: 'application/json' }), handleStripeWebhook);
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// Lazy Initialize Gemini
-let aiClient: GoogleGenAI | null = null;
-function getAi() {
-  if (!aiClient) {
-    const key = process.env.GEMINI_API_KEY;
-    if (!key) throw new Error("GEMINI_API_KEY is not set");
-    aiClient = new GoogleGenAI({ apiKey: key });
-  }
-  return aiClient;
-}
+// Apply rate limiting to all API routes
+app.use('/api', apiLimiter);
 
-// Lazy Initialize Replicate
-let replicateClient: Replicate | null = null;
-function getReplicate() {
-  if (!replicateClient) {
-    const token = process.env.REPLICATE_API_TOKEN;
-    if (!token) throw new Error("REPLICATE_API_TOKEN is not set");
-    replicateClient = new Replicate({ auth: token });
-  }
-  return replicateClient;
-}
+// --- API ROUTES ---
+app.use("/api/auth", authRoutes);
+app.use("/api/user", userRoutes);
+app.use("/api/subscription", subscriptionRoutes);
+app.use("/api/metrics", metricsRoutes);
+app.use("/api/admin", adminRoutes);
 
 // Lazy Initialize Supabase
 let supabaseClient: any = null;
@@ -51,33 +55,13 @@ function getSupabase() {
 // --- API ROUTES ---
 
 // Staging API
-app.post("/api/staging", async (req, res) => {
+app.post("/api/staging/save", async (req, res) => {
   try {
-    const { imageUrl, style } = req.body;
+    const { imageUrl, resultUrls, style } = req.body;
     
-    if (!imageUrl || !style) {
-      return res.status(400).json({ error: "Missing imageUrl or style" });
+    if (!imageUrl || !resultUrls || !style) {
+      return res.status(400).json({ error: "Missing required fields" });
     }
-
-    let replicate;
-    try {
-      replicate = getReplicate();
-    } catch (e: any) {
-      return res.status(400).json({ error: "API ключ Replicate не налаштовано. Додайте REPLICATE_API_TOKEN." });
-    }
-
-    // Call Replicate
-    const output = await replicate.run(
-      "adirik/interior-design:76604baddc85b1b4616e1c6475eca080da339c8875bd4996705440484a6eac38",
-      {
-        input: {
-          image: imageUrl,
-          prompt: style,
-        }
-      }
-    );
-
-    const resultUrls = Array.isArray(output) ? output : [output];
 
     // Save job to database
     const supabase = getSupabase();
@@ -90,10 +74,10 @@ app.post("/api/staging", async (req, res) => {
       });
     }
 
-    res.json({ resultUrls });
+    res.json({ success: true });
   } catch (error) {
-    console.error("Staging error:", error);
-    res.status(500).json({ error: "Failed to generate staging" });
+    console.error("Staging save error:", error);
+    res.status(500).json({ error: "Failed to save staging" });
   }
 });
 
@@ -151,6 +135,9 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     app.use(express.static("dist"));
+    app.get("*", (_req, res) => {
+      res.sendFile(path.resolve(__dirname, "dist", "index.html"));
+    });
   }
 
   app.listen(PORT, "0.0.0.0", () => {

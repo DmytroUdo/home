@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ArrowRight, Image as ImageIcon, Calculator, Hammer, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, Image as ImageIcon, Calculator, Hammer, CheckCircle2, FileText } from 'lucide-react';
 import PricingTable from '../components/PricingTable';
 
 export default function LandingPage() {
@@ -24,7 +24,7 @@ export default function LandingPage() {
       </section>
 
       {/* Features Section */}
-      <section className="grid md:grid-cols-3 gap-8">
+      <section className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
         <div className="bg-white/5 p-8 rounded-2xl border border-white/5 hover:border-white/10 transition-colors">
           <div className="w-14 h-14 bg-purple-500/20 rounded-xl flex items-center justify-center mb-6">
             <ImageIcon className="w-7 h-7 text-purple-400" />
@@ -65,6 +65,20 @@ export default function LandingPage() {
             <li className="flex items-center gap-2 text-sm text-gray-300"><CheckCircle2 className="w-4 h-4 text-[#00FF88]" /> Поради щодо економії</li>
           </ul>
           <Link to="/renovation" className="text-purple-400 font-medium hover:underline flex items-center gap-1">Розрахувати <ArrowRight className="w-4 h-4" /></Link>
+        </div>
+
+        <div className="bg-white/5 p-8 rounded-2xl border border-white/5 hover:border-white/10 transition-colors">
+          <div className="w-14 h-14 bg-purple-500/20 rounded-xl flex items-center justify-center mb-6">
+            <FileText className="w-7 h-7 text-purple-400" />
+          </div>
+          <h3 className="text-2xl font-bold text-white mb-4">Генератор договорів</h3>
+          <p className="text-gray-400 mb-6">Автоматичне створення юридично правильних договорів оренди та купівлі-продажу.</p>
+          <ul className="space-y-3 mb-8">
+            <li className="flex items-center gap-2 text-sm text-gray-300"><CheckCircle2 className="w-4 h-4 text-[#00FF88]" /> Договір оренди</li>
+            <li className="flex items-center gap-2 text-sm text-gray-300"><CheckCircle2 className="w-4 h-4 text-[#00FF88]" /> Договір купівлі-продажу</li>
+            <li className="flex items-center gap-2 text-sm text-gray-300"><CheckCircle2 className="w-4 h-4 text-[#00FF88]" /> Готово за секунди</li>
+          </ul>
+          <Link to="/contracts" className="text-purple-400 font-medium hover:underline flex items-center gap-1">Створити <ArrowRight className="w-4 h-4" /></Link>
         </div>
       </section>
 

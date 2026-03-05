@@ -1,0 +1,108 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (matches auth.uid)
+    // Fields:
+    //   - uid: string (required, immutable) - User's unique ID
+    //   - email: string (required, immutable) - User's email address
+    //   - name: string (optional) - User's display name
+    //   - role: string (required, immutable by user) - 'USER' or 'ADMIN'
+    //   - balance: number (required, immutable by user) - User's credit balance
+    //   - createdAt: timestamp (required, immutable) - Creation timestamp
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN' ||
+          (request.auth.token.email == "dmytro.udo@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == resource.data.uid;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'email', 'name', 'role', 'balance', 'createdAt']) &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() < 128 &&
+             data.email is string && isValidEmail(data.email) && data.email.size() < 256 &&
+             (!('name' in data) || (data.name is string && data.name.size() < 100)) &&
+             data.role in ['USER', 'ADMIN'] &&
+             data.balance is number && data.balance >= 0 &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      
+      allow create: if isAuthenticated() && 
+                       isOwner(userId) && 
+                       isValidUser(request.resource.data) && 
+                       hasRequiredFields(['uid', 'email', 'role', 'balance', 'createdAt']) &&
+                       uidUnchanged() &&
+                       request.resource.data.role == 'USER' && // Users can only create themselves as 'USER'
+                       request.resource.data.balance == 1000 && // Initial balance
+                       request.resource.data.createdAt == request.time;
+                       
+      allow update: if isAuthenticated() && 
+                       isValidUser(request.resource.data) &&
+                       (
+                         // Admins can update anything
+                         isAdmin() ||
+                         // Users can only update their own profile name
+                         (isOwner(userId) && 
+                          uidNotModified() &&
+                          areImmutableFieldsUnchanged(['email', 'role', 'balance', 'createdAt']))
+                       );
+                       
+      allow delete: if isAdmin();
+    }
+  }
+}

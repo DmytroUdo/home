@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { Upload, Loader2, Share2, Download, Image as ImageIcon } from 'lucide-react';
+import { GoogleGenAI } from "@google/genai";
 
 const STYLES = [
   { id: 'scandinavian', name: 'Скандинавський', prompt: 'scandinavian style furnished living room, white walls, wood accents, minimal, bright, photorealistic' },
@@ -46,22 +47,61 @@ export default function StagingPage() {
 
       const stylePrompt = STYLES.find(s => s.id === selectedStyle)?.prompt || '';
 
-      const response = await fetch('/api/staging', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imageUrl: base64Image,
-          style: stylePrompt
-        })
+      const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || "" });
+      
+      const matches = base64Image.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.+)$/);
+      if (!matches || matches.length !== 3) {
+        throw new Error("Invalid image format");
+      }
+      const mimeType = matches[1];
+      const base64Data = matches[2];
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image',
+        contents: {
+          parts: [
+            {
+              inlineData: {
+                data: base64Data,
+                mimeType: mimeType,
+              },
+            },
+            {
+              text: `Redesign this empty room into a fully furnished room. Style: ${stylePrompt}. Make it photorealistic and high quality.`,
+            },
+          ],
+        },
       });
 
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Помилка генерації');
+      let resultUrls: string[] = [];
+      if (response.candidates && response.candidates[0]?.content?.parts) {
+        for (const part of response.candidates[0].content.parts) {
+          if (part.inlineData) {
+            resultUrls.push(`data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`);
+          }
+        }
       }
 
-      setResults(data.resultUrls);
+      if (resultUrls.length === 0) {
+        throw new Error("Failed to generate image from Gemini");
+      }
+
+      // Save to backend optionally
+      try {
+        await fetch('/api/staging/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageUrl: base64Image,
+            resultUrls: resultUrls,
+            style: stylePrompt
+          })
+        });
+      } catch (e) {
+        console.error("Failed to save to backend", e);
+      }
+
+      setResults(resultUrls);
     } catch (error: any) {
       console.error(error);
       alert(error.message || 'Помилка генерації. Спробуйте ще раз.');

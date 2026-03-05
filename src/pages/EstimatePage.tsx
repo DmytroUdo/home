@@ -21,61 +21,25 @@ export default function EstimatePage() {
     setResult(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || "" });
+      // Mock response for "без апі роби"
+      await new Promise(resolve => setTimeout(resolve, 1500));
       
-      const prompt = `You are a Ukrainian real estate expert with deep knowledge of property market in 2024-2025. 
-
-Apartment details:
-- City: ${formData.city}
-- District: ${formData.district}
-- Area: ${formData.area} m²
-- Floor: ${formData.floor} of ${formData.total_floors}
-- Condition: ${formData.condition}
-- Year built: ${formData.year}
-
-Return ONLY valid JSON, no markdown, no explanation:
-{
-  "sale_price_min": number in UAH,
-  "sale_price_max": number in UAH,
-  "rental_price_min": number in UAH per month,
-  "rental_price_max": number in UAH per month,
-  "price_per_sqm": number in UAH,
-  "market_trend": "sell_now" or "wait" or "neutral",
-  "trend_reason": string 2 sentences in Ukrainian,
-  "confidence": "high" or "medium" or "low"
-}`;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              sale_price_min: { type: Type.NUMBER },
-              sale_price_max: { type: Type.NUMBER },
-              rental_price_min: { type: Type.NUMBER },
-              rental_price_max: { type: Type.NUMBER },
-              price_per_sqm: { type: Type.NUMBER },
-              market_trend: { type: Type.STRING },
-              trend_reason: { type: Type.STRING },
-              confidence: { type: Type.STRING }
-            },
-            required: ["sale_price_min", "sale_price_max", "rental_price_min", "rental_price_max", "price_per_sqm", "market_trend", "trend_reason", "confidence"]
-          }
-        }
-      });
-
-      const data = JSON.parse(response.text || "{}");
+      const basePricePerSqm = 40000;
+      const area = parseFloat(formData.area) || 50;
+      const saleMin = basePricePerSqm * area * 0.9;
+      const saleMax = basePricePerSqm * area * 1.1;
       
-      // Save to backend
-      fetch('/api/save-estimate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input_data: formData, result: data })
-      }).catch(console.error);
-
+      const data = {
+        sale_price_min: saleMin,
+        sale_price_max: saleMax,
+        rental_price_min: saleMin * 0.005,
+        rental_price_max: saleMax * 0.005,
+        price_per_sqm: basePricePerSqm,
+        market_trend: "sell_now",
+        trend_reason: "Ціни в цьому районі стабілізувалися, але попит на квартири з таким плануванням залишається високим. Рекомендуємо продавати зараз для отримання максимальної вигоди.",
+        confidence: "high"
+      };
+      
       setResult(data);
     } catch (error: any) {
       console.error(error);

@@ -8,8 +8,28 @@ export default function RenovationPage() {
     area: '',
     description: ''
   });
+  const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
+
+  const COMMON_TASKS = [
+    { id: 'painting', label: 'Фарбування стін/стелі' },
+    { id: 'tiling', label: 'Укладання плитки' },
+    { id: 'electrical', label: 'Електромонтажні роботи' },
+    { id: 'plumbing', label: 'Сантехнічні роботи' },
+    { id: 'flooring', label: 'Укладання підлоги (ламінат/паркет)' },
+    { id: 'demolition', label: 'Демонтажні роботи' },
+    { id: 'doors', label: 'Встановлення дверей' },
+    { id: 'windows', label: 'Заміна вікон' }
+  ];
+
+  const handleTaskToggle = (taskId: string) => {
+    setSelectedTasks(prev => 
+      prev.includes(taskId) 
+        ? prev.filter(id => id !== taskId)
+        : [...prev, taskId]
+    );
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,12 +39,18 @@ export default function RenovationPage() {
     try {
       const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || "" });
       
+      const selectedTaskLabels = selectedTasks
+        .map(id => COMMON_TASKS.find(t => t.id === id)?.label)
+        .filter(Boolean)
+        .join(', ');
+
       const prompt = `You are a Ukrainian construction expert. Current year is 2025.
 
 Calculate a detailed renovation quote based on:
 - City: ${formData.city}
 - Area: ${formData.area} m²
-- Description: ${formData.description}
+- Selected specific tasks: ${selectedTaskLabels || 'None specified'}
+- Additional description: ${formData.description}
 
 Return ONLY valid JSON, no markdown, no explanation:
 {
@@ -143,14 +169,42 @@ Return ONLY valid JSON, no markdown, no explanation:
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Опис ремонту</label>
+                <label className="block text-sm font-medium text-gray-300 mb-3">Основні види робіт</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {COMMON_TASKS.map(task => (
+                    <label 
+                      key={task.id} 
+                      className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                        selectedTasks.includes(task.id) 
+                          ? 'bg-purple-500/20 border-purple-500/50' 
+                          : 'bg-black/20 border-white/5 hover:border-white/20'
+                      }`}
+                    >
+                      <div className="relative flex items-center justify-center w-5 h-5 shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={selectedTasks.includes(task.id)}
+                          onChange={() => handleTaskToggle(task.id)}
+                          className="appearance-none w-5 h-5 border-2 border-gray-500 rounded-md checked:border-purple-500 checked:bg-purple-500 transition-colors cursor-pointer peer"
+                        />
+                        <CheckCircle2 className="absolute w-3.5 h-3.5 text-white opacity-0 peer-checked:opacity-100 pointer-events-none" />
+                      </div>
+                      <span className={`text-sm ${selectedTasks.includes(task.id) ? 'text-white font-medium' : 'text-gray-400'}`}>
+                        {task.label}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Додатковий опис (необов'язково)</label>
                 <textarea 
                   name="description" 
-                  required
-                  rows={5}
+                  rows={3}
                   value={formData.description} 
                   onChange={handleChange}
-                  placeholder="Наприклад: Потрібен капітальний ремонт ванної кімнати. Заміна труб, укладання плитки, встановлення душової кабіни та бойлера."
+                  placeholder="Наприклад: Потрібен капітальний ремонт ванної кімнати. Заміна труб, встановлення душової кабіни та бойлера."
                   className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none transition-all resize-none"
                 />
               </div>
